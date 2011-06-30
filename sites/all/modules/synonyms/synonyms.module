@@ -1,0 +1,36 @@
+<?php
+/**
+ * Implementattion of hook_nodeapi
+ * This hook loads when Drupal starts updating it's search index for a node.
+ * We  then get all terms from the categories associated to it, and find their synonyms.
+ * The synonyms are then added to the results
+*/
+
+function synonyms_nodeapi(&$node, $op, $teaser = NULL, $page = NULL) {
+  if ($op == 'update index') {
+    // Check if it's a node and if there are any taxonomy terms.
+    if ($node->nid > 0 && !empty($node->taxonomy)) {
+        $text = array();
+        $getTerms = $node->taxonomy;
+
+        foreach($getTerms as $nodeTerm) {
+            $childSynonyms = taxonomy_get_synonyms($nodeTerm->tid);
+            foreach($childSynonyms as $childSynonym){
+                $text[] = $childSynonym;
+            }
+            $parents = taxonomy_get_parents($nodeTerm->tid);
+            foreach($parents as $parent) {
+                $text[] = $parent->name;
+                $synonyms = taxonomy_get_synonyms($parent->tid);
+                foreach($synonyms as $synonym){
+                    $text[] = $synonym;
+                }
+            }
+        }
+
+        return '<strong>('. implode(', ', $text) .')</strong>';
+    } else {
+        return false;
+    }
+  }
+}

@@ -1,0 +1,124 @@
+<?php
+// $Id$
+
+    /**
+    * Display help and module information
+    * @param path which path of the site we're displaying help
+    * @param arg array that holds the current path as would be returned from arg() function
+    * @return help text for the path
+    */
+    function user_directions_help($path, $arg) {
+        $output = '';
+        switch ($path) {
+            case "admin/help#user_directions":
+            $output = '<p>'.  t("Help message") .'</p>';
+            break;
+        }
+        return $output;
+    }
+    
+    /**
+    * Valid permissions for this module
+    * @return array An array of valid permissions for the Noeuds module
+    */
+    function user_directions_perm() {
+        return array(t('View user\'s directions'));
+    }
+    
+    function _build_directions_map($fromUid, $toUid) {
+        $fromLatLon = _get_users_coords($fromUid);
+        $toLatLon = _get_users_coords($toUid);
+        
+        if ($fromLatLon && $toLatLon) {
+            $from = $fromLatLon['lat'] . ',' . $fromLatLon['lon'];
+            $to =  $toLatLon['lat'] . ',' . $toLatLon['lon'];
+            
+            $sql = "SELECT uid, name FROM {users} WHERE uid IN(%d, %d)";
+            $result = db_query($sql, $fromUid, $toUid);
+            while($curUser = db_fetch_object($result)) {
+                $userNames[$curUser->uid] = $curUser->name;
+            }
+            
+            $directions = getdirections_locations_bylatlon($userNames[$fromUid], $from, $userNames[$toUid], $to);
+            return ($directions) ? $directions : "<p>Pas d'itinéraire disponible.</p>";
+        } else {
+            return "<p>Pas d'itinéraire disponible.</p>";
+        }
+    }
+
+    function user_directions_user($op, &$edit, &$account, $category = NULL) {
+        switch ($op) {
+            case "view":
+                global $user;
+                if ($account->content['Adresse']["profile_zip"]["#value"] && $account->content['Adresse']["profile_street"]["#value"]) {
+                    $account->content['Adresse']["profile_zip"]["#value"] = " - ".$account->content['Adresse']["profile_zip"]["#value"];
+                }
+                $account->content['Adresse']["#weight"] = -10;
+                $account->content['summary']["#weight"] = -9;
+                if (user_access('View user\'s directions') && $user->uid != $account->uid) {
+                    $out = _build_directions_map($user->uid, $account->uid);
+                    
+                    $account->content['directions'] = array(
+                        '#type' => 'user_profile_category',
+                        '#attributes' => array('class' => 'user-member'),
+                        '#weight' => 10,
+                        '#title' => t('Itinéraire'),
+                        'map' => array(
+                            '#type' => 'user_profile_item',
+                            '#value' => $out,
+                            '#weight' => 0,
+                        ),
+                    );
+                }
+                break;
+            case "insert":
+                $result = db_query('INSERT INTO {noeuds} (uid,balance) VALUES(%d, 0)', $account->uid);
+                break;
+            case "delete":
+                $result = db_query('DELETE FROM {noeuds} WHERE uid = %d', $account->uid);
+                break;
+            case "after_update":
+                if (isset($account->profile_street) || isset($account->profile_zip) || isset($account->profile_city)) {
+                    $address = $account->profile_street." ".$account->profile_zip." ".$account->profile_city." Belgique";
+                    $coords = google_geocode_location($address);
+                    $result = db_query('DELETE FROM {user_directions} WHERE uid = %d', $account->uid);
+                    if ((isset($coords['lat']) && $coords['lat'] != '') && (isset($coords['lon']) && $coords['lon'] != '')) {
+                    	$result = db_query('INSERT INTO {user_directions} (uid,lat,lon) VALUES(%d, %s, %s)', $account->uid, $coords['lat'], $coords['lon']);
+                    }
+                }
+        }
+    }
+    
+    function _get_users_coords($uid) {
+        $result = db_query('SELECT lat,lon FROM {user_directions} WHERE uid = %d', $uid);
+        return db_fetch_array($result);
+    }
+    
+    function google_geocode_location($location = '') {
+        if (function_exists('gmap_get_key')) {
+            $key = gmap_get_key();
+        }
+        $service_url = 'http://maps.google.com/maps/geo?output=xml&key='. $key .'&q=';
+        $http_reply = drupal_http_request($service_url . urlencode($location));
+
+        $status_code_match = array();
+        preg_match('/<code>(.*)<\/code>/', $http_reply->data, $status_code_match);
+        $status_code = $status_code_match[1];
+        if ($status_code != 200) {
+            return NULL;
+        }
+
+        $accuracy_code_match = array();
+        preg_match('/Accuracy="([0-9])"/', $http_reply->data, $accuracy_code_match);
+        $accuracy_code = $accuracy_code_match[1];
+        if ($accuracy_code < 3) {
+            return NULL;
+        }
+
+        $latlon_match = array();
+        preg_match('/<coordinates>(.*)<\/coordinates>/', $http_reply->data, $latlon_match);
+
+        $latlon_exploded = explode(',', $latlon_match[1]);
+        
+        return array('lat' => $latlon_exploded[1], 'lon' => $latlon_exploded[0]);
+    }

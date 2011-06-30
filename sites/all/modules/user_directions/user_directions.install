@@ -1,0 +1,49 @@
+<?php
+// $Id$
+
+    function user_directions_schema() {
+        $schema['user_directions'] = array(
+            'description' => t('The base table for User Directions.'),
+            'fields' => array(
+                'did' => array(
+                    'description' => t('The primary identifier.'),
+                    'type' => 'serial',
+                    'unsigned' => TRUE,
+                    'not null' => TRUE
+                ),
+                'uid' => array(
+                    'description' => t('The user id.'),
+                    'type' => 'int',
+                    'unsigned' => TRUE,
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'lat' => array(
+                    'description' => t('The latitude of a user.'),
+                    'type' => 'float',
+                    'size' => 'big',
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'lon' => array(
+                    'description' => t('The longitude of a user.'),
+                    'type' => 'float',
+                    'size' => 'big',
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+            ),
+            'primary key' => array('did'),
+        );
+        
+        return $schema;
+    }
+    
+    function user_directions_install() {
+        drupal_install_schema('user_directions');
+    }
+    
+    function user_directions_uninstall() {
+        drupal_uninstall_schema('user_directions');
+    }
+?>

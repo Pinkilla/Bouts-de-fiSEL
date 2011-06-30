@@ -1,0 +1,6 @@
+; $Id$
+name = User Directions
+description = Shows a Gmap directions from connected user to the viewed profile
+core = 6.x
+package = zzz
+

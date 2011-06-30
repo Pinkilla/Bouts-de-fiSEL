@@ -1,0 +1,139 @@
+<?php
+// $Id: passquickset.module,v 1.1.2.2 2009/07/28 14:52:06 solipsist Exp $
+
+/**
+ * @file
+ * Password Quick Set enables site administrators to quickly set new randomly
+ * generated passwords for users and also notify the users about it.
+ *
+ * Author(s):
+ *   Jakob Persson <http://drupal.org/user/37564>
+ *   Tobias Sjösten <http://drupal.org/user/213383>
+ *
+ * Sponsor(s):
+ *   NodeOne <http://nodeone.se>
+ *   SF Bio <http://www.sf.se>
+ */
+
+/* ************************************************************************* *
+ * DRUPAL HOOKS
+ * ************************************************************************* */
+
+/**
+ * Implementation of hook_perm().
+ *
+ * The 'generate password' permission is useless without also having the
+ * 'administer users'.
+ */
+function passquickset_perm() {
+  return array('generate password');
+}
+
+/**
+ * Implementation of hook_form_[user_profile_form]_alter().
+ */
+function passquickset_form_user_profile_form_alter(&$form, &$form_state) {
+  if (!user_access('generate password')) {
+    return;
+  }
+
+  foreach ($form['account'] as $name => $element) {
+    if ($name == 'pass') {
+      $new_account['genpass'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Generate new password'),
+        '#weight' => $element['#weight'],
+        '#collapsible' => false,
+        '#collapsed' => false,
+
+      );
+      $new_account['genpass']['description'] = array(
+        '#value' => '<p>'. t('Click the button below to generate a new random password for the user and have it sent to him or her.') .'</p>',
+      );
+      $new_account['genpass']['genpass'] = array(
+        '#type' => 'submit',
+        '#value' => t('Generate new password'),
+        '#submit' => array('passquickset_form_alter_generate'),
+      );
+    }
+
+    $new_account[$name] = $element;
+  }
+  $form['account'] = $new_account;
+}
+
+
+/**
+ * Implementation of hook_form_user_admin_settings_alter().
+ */
+function passquickset_form_user_admin_settings_alter(&$form, &$form_state) {
+  $form['email']['password_generated'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Password Quick Set email'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#description' => t("This email is sent when you click the 'Generate new password' button in the user edit form. Available variables are: !username, !password and !site (name of your site as defined in <a href=\"!site_info\">Site Information</a>), !login_url, !uri, !uri_brief, !mailto, !date, !login_uri and !edit_uri.", array('!site_info' => url('admin/settings/site-information'))),
+  );
+  $form['email']['password_generated']['passquickset_password_generated_subject'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Subject'),
+    '#default_value' => variable_get('passquickset_password_generated_subject', _passquickset_notify_mail('generated_subject')),
+    '#maxlength' => 180,
+  );
+  $form['email']['password_generated']['passquickset_password_generated_body'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Body'),
+    '#default_value' => variable_get('passquickset_password_generated_body', _passquickset_notify_mail('generated_body')),
+    '#rows' => 3,
+  );
+}
+
+/**
+ * Implementation of hook_form_alter_formname()
+ */
+function passquickset_form_alter_generate($form, &$form_state) {
+  $uid = $form_state['values']['_account']->uid;
+  $user = user_load($uid);
+
+  $password = user_password();
+
+  if (!user_save($user, array('pass' => $password))) {
+    drupal_set_message(t('Password could not be updated!'), 'error');
+    return;
+  }
+
+  drupal_set_message(t("Password set to '@password'.", array('@password' => $password)));
+
+  $params = array('user' => $user, 'password' => $password);
+  $language = user_preferred_language($user);
+  drupal_mail('passquickset', 'passgen', $user->mail, $language, $params);
+}
+
+/**
+ * Message and subject defaults
+ *
+ * @param <type> $param
+ * @return <type>
+ */
+function _passquickset_notify_mail($param) {
+  if ($param == 'generated_subject') {
+    return 'New password at !site';
+  }
+  else {
+    return "Hello !username,\r\n\r\nYour password at !site has changed. Please use !password to log in from now on.";
+  }
+}
+
+/**
+ * Implementation of hook_mail().
+ */
+function passquickset_mail($key, &$message, $params) {
+  $user = $params['user'];
+  $language = $message['language'];
+
+  $variables = user_mail_tokens($user, $language);
+  $variables['!password'] = $params['password'];
+
+  $message['subject'] = t(variable_get('passquickset_password_generated_subject', _passquickset_notify_mail('generated_subject')), $variables, $language->language);
+  $message['body'] = t(variable_get('passquickset_password_generated_subject', _passquickset_notify_mail('generated_body')), $variables, $language->language);
+}

@@ -1,0 +1,5 @@
+; $Id$
+name = Noeuds
+description = Gestion des noeuds.
+core = 6.x
+package = zzz

@@ -1,0 +1,39 @@
+/* $Id: getdirections.css,v 1.2.2.1 2010/03/22 23:17:07 hutch Exp $ */
+/* $Name: DRUPAL-6--1-3 $ */
+#getdirections_directions {
+  width: 250px;
+  padding: 2px;
+
+}
+
+#getdirections_map_canvas {
+
+}
+
+.getdirections {
+  margin-top: 8px;
+
+
+}
+.getdirections-list {
+  background: #FFFFFF;
+}
+
+.getdirections-map {
+  padding: 2px;
+  border: 1px solid #C0C0C0;
+  text-align: center;
+  background: #FFFFFF;
+}
+
+.getdirections_display {
+  margin-bottom: 8px;
+}
+.getdirections_display label {
+  font-weight: 600;
+}
+
+tbody, thead {
+border-top: 0;
+border-bottom: 0;
+}

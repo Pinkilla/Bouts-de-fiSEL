@@ -1,0 +1,42 @@
+// $Id: CHANGELOG.txt,v 1.10 2010/02/04 14:29:04 ktleow Exp $
+
+Fervens 6.x-2.4, 2010-02-04
+---------------------------
+- Removed "logged-in", "not-logged-in" class from template.php,
+  page.tpl.php, maintenance-page.tpl.php.
+- Changed fonts and some administration page styles.
+
+Fervens 6.x-2.3, 2010-01-20
+---------------------------
+- Added RTL support with basic layout.
+- Cleaned up the codes, following coding conventions.
+- Updated PNG Fix to latest version (iepngfix.htc).
+- Renamed "clear-block" to "clear-both" to avoid confusion and conflicts.
+
+Fervens 6.x-2.2, 2009-12-12
+---------------------------
+- Added $Id: CHANGELOG.txt,v 1.10 2010/02/04 14:29:04 ktleow Exp $ information on every file.
+
+Fervens 6.x-2.1, 2009-12-12
+---------------------------
+- Fixed issue with node links sticking to each other in languages other than
+  English.
+- Added feature request for dropdown menus (primary links only).
+
+Fervens 6.x-2.0, 2009-12-04
+---------------------------
+- Complete rewrite of Fervens with cleaner codes.
+- The green sidebar now have the same look as PSD source (blocks combining to
+  each other).
+- Includes theme settings that allow users to switch between 3 types of layout
+  (based on original PSD).
+- Ability to choose between liquid or fixed width layout from theme settings.
+- Added support for PNG Fix (applied mainly to logo).
+- Theme now comes with search box (top right).
+- Better administration page styles.
+
+Fervens 6.x-1.0-beta1, 2009-01-02
+---------------------------------
+- First release.
+- Tested with most browsers; Firefox 3, Firefox 2, IE7, IE6, Safari 3.2, Google
+  Chrome, Opera 9.6.

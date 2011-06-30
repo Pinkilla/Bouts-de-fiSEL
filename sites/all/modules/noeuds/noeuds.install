@@ -1,0 +1,112 @@
+<?php
+// $Id$
+
+    function noeuds_schema() {
+        $schema['noeuds'] = array(
+            'description' => t('The base table for Noeuds.'),
+            'fields' => array(
+                'nid' => array(
+                    'description' => t('The primary identifier.'),
+                    'type' => 'serial',
+                    'unsigned' => TRUE,
+                    'not null' => TRUE
+                ),
+                'uid' => array(
+                    'description' => t('The user id.'),
+                    'type' => 'int',
+                    'unsigned' => TRUE,
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'balance' => array(
+                    'description' => t('The Noeuds amount for a user.'),
+                    'type' => 'numeric',
+                    'precision' => 8,
+                    'scale' => 2,
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+            ),
+            'primary key' => array('nid'),
+        );
+        $schema['noeuds_transactions'] = array(
+            'description' => t('The table for Noeuds transactions.'),
+            'fields' => array(
+                'tid' => array(
+                    'description' => t('The primary identifier.'),
+                    'type' => 'serial',
+                    'unsigned' => TRUE,
+                    'not null' => TRUE
+                ),
+                'suid' => array(
+                    'description' => t('The source user id.'),
+                    'type' => 'int',
+                    'unsigned' => TRUE,
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'duid' => array(
+                    'description' => t('The destination user id.'),
+                    'type' => 'int',
+                    'unsigned' => TRUE,
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'suid_balance' => array(
+                    'description' => t('Previous balance of the source user.'),
+                    'type' => 'numeric',
+                    'precision' => 8,
+                    'scale' => 2,
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'duid_balance' => array(
+                    'description' => t('Previous balance of the destination user.'),
+                    'type' => 'numeric',
+                    'precision' => 8,
+                    'scale' => 2,
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'amount' => array(
+                    'description' => t('The Noeuds amount for a transaction.'),
+                    'type' => 'numeric',
+                    'precision' => 8,
+                    'scale' => 2,
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'message' => array(
+                    'description' => t('The reason of the transaction.'),
+                    'type' => 'varchar',
+                    'length' => 255,
+                    'not null' => TRUE,
+                    'default' => ''
+                ),
+                'valid' => array(
+                    'description' => t('validation flag to tell if transaction is effective.'),
+                    'type' => 'int',
+                    'size' => 'tiny',
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+                'executed_on' => array(
+                    'description' => t('Timestamp for entry creation.'),
+                    'type' => 'int',
+                    'not null' => TRUE,
+                    'default' => 0
+                ),
+            ),
+            'primary key' => array('tid'),
+        );
+        return $schema;
+    }
+    
+    function noeuds_install() {
+        drupal_install_schema('noeuds');
+    }
+    
+    function noeuds_uninstall() {
+        drupal_uninstall_schema('noeuds');
+    }
+?>

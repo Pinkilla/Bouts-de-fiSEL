@@ -1,0 +1,49 @@
+/* $Id: style-rtl.css,v 1.1 2010/01/20 11:19:34 ktleow Exp $ */
+
+/*
+* HTML elements
+*/
+html {
+  direction: rtl;
+}
+body {
+  direction: rtl;
+}
+
+/*
+* Layout styles
+*/
+#site-title {
+  float: right;
+  margin-right: 0;
+  width: auto;
+}
+#logo {
+  float: right;
+  margin-left: 15px;
+}
+#site-name-and-slogan {
+  float: right;
+}
+#header-region {
+  float: left;
+}
+body.search-box #primary {
+  float: right;
+  margin-right: 0;
+}
+#primary ul.menu li li:hover ul,
+#primary ul.menu li li.sfHover ul {
+  left: -160px;
+}
+#primary ul.menu li li li:hover ul,
+#primary ul.menu li li li.sfHover ul {
+  left: -160px;
+}
+#search-box {
+  float: left;
+}
+#i-love-sm {
+  float: left;
+  margin: 0 20px 0 0;
+}

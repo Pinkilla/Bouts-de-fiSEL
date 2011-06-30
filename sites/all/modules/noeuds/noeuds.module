@@ -1,0 +1,630 @@
+<?php
+// $Id$
+
+    /**
+    * Display help and module information
+    * @param path which path of the site we're displaying help
+    * @param arg array that holds the current path as would be returned from arg() function
+    * @return help text for the path
+    */
+    function noeuds_help($path, $arg) {
+        $output = '';
+        switch ($path) {
+            case "admin/help#noeuds":
+            $output = '<p>'.  t("Help message") .'</p>';
+            break;
+        }
+        return $output;
+    }
+    
+    /**
+    * Valid permissions for this module
+    * @return array An array of valid permissions for the Noeuds module
+    */
+    function noeuds_perm() {
+        return array(t('Administer Noeuds'), t('Set Noeuds transactions'), t('View user\'s Neuds'));
+    }
+    
+    function noeuds_menu() {
+        $items = array();
+        
+        $items['noeuds/transaction/edit/%'] = array(
+            'title' => 'Modifier une transaction',
+            'page callback' => 'edit_transaction',
+            'page arguments' => array(),
+            'access arguments' => array('Administer Noeuds'),
+            'type' => MENU_CALLBACK
+        );
+        
+        $items['noeuds/transaction/delete/%'] = array(
+            'title' => 'Supprimer une transaction',
+            'page callback' => 'delete_transaction',
+            'page arguments' => array(),
+            'access arguments' => array('Administer Noeuds'),
+            'type' => MENU_CALLBACK
+        );
+        
+        $items['noeuds/transaction/statistics'] = array(
+            'title' => 'Statistiques d\'échanges',
+            'page callback' => 'transaction_stats',
+            'page arguments' => array(),
+            'access arguments' => array('Administer Noeuds'),
+            'type' => MENU_CALLBACK
+        );
+        $items['noeuds/transaction/monthly_fee'] = array(
+            'title' => 'Prélèvement mensuel',
+            'page callback' => 'monthly_fee',
+            'page arguments' => array(),
+            'access arguments' => array('administer modules'),
+            'type' => MENU_CALLBACK
+        );
+
+        return $items;
+    }
+    
+    function _build_noeuds_stats($startArray, $endArray) {
+        $start = mktime(0, 0, 0, $startArray["month"]  , $startArray["day"], $startArray["year"]);
+        $end = mktime(23, 59, 59, $endArray["month"]  , $endArray["day"], $endArray["year"]);
+        
+        // The difference between two timestamps to compute time span.
+        // There is 86400 seconds in a day.
+        $ecart = ceil(($end - $start) / 86400);
+        
+        $query = "SELECT 
+                    COUNT(tid) as qty, 
+                    SUM(amount) as total, 
+                    FROM_UNIXTIME(executed_on, '%s') as quand 
+                  FROM {noeuds_transactions} 
+                  WHERE executed_on >= %s AND executed_on <= %s 
+                  GROUP BY FROM_UNIXTIME(executed_on, '%s')";
+        $results = db_query($query, "%d/%m/%y", $start, $end, "%d/%m/%Y");
+        $max = 0;
+        
+        while ($result = db_fetch_array($results)){
+            $data[$result['quand']]['total'] = $result['total'];
+            $data[$result['quand']]['qty'] = $result['qty'];
+        }
+        
+        // To avoid having too much labels below the chart, place a limit to 10
+        $labelLimit = ceil(($ecart - 1) / 10);
+        
+        for ($i = 0; $i < $ecart; $i++) {
+            $label = date("d/m/y", mktime(0, 0, 0, $startArray["month"]  , $startArray["day"]+$i, $startArray["year"]));
+
+            $total = (isset($data[$label]['total'])) ? $data[$label]['total'] : 0;
+            $qty = (isset($data[$label]['qty'])) ? $data[$label]['qty'] : 0;
+            $chart['#data']["count"][] = $total;
+            $chart['#data']["qty"][] = $qty;
+            if ($total > $max) {
+                $max = $total;
+            }
+            if ($qty > $max) {
+                $max = $qty;
+            }
+            $chart['#labels'][] = $label;
+        }
+        
+        if ($max > 0) {
+            $hLinesInterval = 100/$max;
+            while ($hLinesInterval < 5) {
+                $hLinesInterval = $hLinesInterval * 2;
+            }
+        } else {
+            $hLinesInterval = 200;
+            $max = .75;
+        }
+        $x_stepscalc = $ecart;
+        $x_steps = 1;
+        while ($x_stepscalc > 20) {
+        	$x_stepscalc = $x_stepscalc / 2;
+        	$x_steps++;
+        }
+        
+        $chart['#data_colors'][] = chart_unique_color("Total");
+        $chart['#legends'][]     = "A";
+        $chart['#data_colors'][] = chart_unique_color("Nombre");
+        $chart['#legends'][]     = "B";
+        $chart['#chart_id']   = 'Echanges';
+        $chart['#type']       = CHART_TYPE_LINE;
+        $chart['#size']       = chart_size(620, 350);
+        $chart['#grid_lines'] = chart_grid_lines(100 / ($ecart-1), $hLinesInterval, 1, 3);
+        $chart['#mixed_axis_labels'][CHART_AXIS_Y_LEFT][0][] = chart_mixed_axis_range_label(0, $max);
+        $chart['#ranges'] = "-1,".$max;
+        
+        $g = new open_flash_chart_api();
+        $g->set_bg_colour('#ffffff');
+        $g->set_title( t('Echanges'), '{font-size: 20px;}' );
+        $g->set_width(620);
+        $g->set_height(350);
+        $g->set_data($chart['#data']["count"]);
+        $g->set_data($chart['#data']["qty"]);
+        $g->line_hollow( 2, 4, 'FD822F', 'Noeuds échangés', 10 );
+        $g->line_dot( 2, 4, '363c3f', 'Nombre d\'échanges', 10);
+        $g->y_label_steps( 10 );
+        $g->set_x_label_style( 10, '#333333', 2, $x_steps );
+        $g->set_x_labels( $chart['#labels'] );
+        $g->set_y_max( $max );
+        
+        
+        //$output .= "<p><strong>A</strong> : Noeuds échangés.<br /><strong>B</strong> : Nombre d'échanges</p>";
+        return $g->render();
+    }
+    
+    function _build_user_stats($startArray, $endArray) {
+        $listUsersNames = _list_uid_to_name();
+        $start = mktime(0, 0, 0, $startArray["month"]  , $startArray["day"], $startArray["year"]);
+        $end = mktime(23, 59, 59, $endArray["month"]  , $endArray["day"], $endArray["year"]);
+        
+        // The difference between two timestamps to compute time span.
+        // There is 86400 seconds in a day.
+        $ecart = ceil(($end - $start) / 86400);
+        
+        $query = "SELECT 
+                    amount,
+                    suid,
+                    duid
+                  FROM {noeuds_transactions} 
+                  WHERE executed_on >= %s AND executed_on <= %s";
+        $results = db_query($query, $start, $end);
+        $max = 0;
+        $min = 0;
+        
+        while ($result = db_fetch_array($results)){
+            //if (!isset($data[$result['suid']])) {$data[$result['suid']] = 0;}
+            //if (!isset($data[$result['duid']])) {$data[$result['duid']] = 0;}
+            $data[$result['suid']] += $result['amount'];
+            $data[$result['duid']] -= $result['amount'];
+        }
+        
+        // TODO: Sort array by amount DESC
+        
+        if (count($data)) {
+            foreach ($data as $key => $value) {
+                $chart['#data']["users"][] = $value;
+                $chart['#labels'][] = $listUsersNames[$key];
+                if ($value > $max) {
+                    $max = $value;
+                }
+                if ($value < $min) {
+                    $min = $value;
+                }
+            }
+            
+            if ($max > 0) {
+                $hLinesInterval = 100/$max;
+                while ($hLinesInterval < 5) {
+                    $hLinesInterval = $hLinesInterval * 2;
+                }
+            } else {
+                $hLinesInterval = 200;
+                $max = .75;
+            }
+            $width = floor((620 / count($chart['#data']["users"])) * 0.75);
+            $spacing = floor((620 / count($chart['#data']["users"])) * 0.25);
+            
+            $chart['#data_colors'][] = chart_unique_color("Users");
+            $chart['#chart_id']   = 'Users';
+            $chart['#title']      = chart_title(t('Echanges'));
+            $chart['#type']       = CHART_TYPE_BAR_V;
+            $chart['#size']       = chart_size(620, 350);
+            $chart['#grid_lines'] = chart_grid_lines(100 / ($ecart-1), $hLinesInterval, 1, 3);
+            $chart['#bar_size'] = array('#size' => $width,'#spacing' => $spacing);
+            $chart['#mixed_axis_labels'][CHART_AXIS_Y_LEFT][0][] = chart_mixed_axis_range_label(0, $max);
+            $chart['#ranges'] = "0,".$max;
+            
+            $bar = new bar_outline( 50, '#FD822F', '#333333' );
+            $bar->key( 'Noeuds échangés', 10 );
+            $g = new open_flash_chart_api();
+            $g->set_bg_colour('#ffffff');
+            $g->set_width(620);
+            $g->set_height(350);
+            $g->title( 'Echanges par membres', '{font-size: 20px;}' );
+            $bar->data = $chart['#data']["users"];
+            $g->data_sets[] = $bar;
+            $g->set_x_labels($chart['#labels']);
+            $g->set_x_label_style( 12, '#333333', 2, 1 );
+            $g->set_y_min( $min );
+            $g->set_y_max( $max );
+            
+            $output = $g->render();
+        } else {
+            $output = "<p>Pas d'échanges</p>";
+        }
+        return $output;
+    }
+    
+    function transaction_stats() {
+        // Récupération des dates de début et de fin sous forme de tableau et de timestamp
+        if (isset($_SESSION['noeuds_period_form_start'])) {
+            $startArray = $_SESSION['noeuds_period_form_start'];
+            $endArray = $_SESSION['noeuds_period_form_end'];
+        } else {
+            $startArray = array("month" => date("m"), "day" => 1, "year" => date("Y"));
+            $endArray = array("month" => date("m"), "day" => date("t"), "year" => date("Y"));
+        }
+        $output = _build_noeuds_stats($startArray, $endArray);
+        $output .= _build_user_stats($startArray, $endArray);
+        $output .= drupal_get_form('transaction_stats_form');
+        return $output;
+    }
+    
+    function transaction_stats_form($form_state) {
+        if (isset($_SESSION['noeuds_period_form_start'])) {
+            $startArray = $_SESSION['noeuds_period_form_start'];
+            $endArray = $_SESSION['noeuds_period_form_end'];
+            $start = array("month" => $startArray["month"], "day" => $startArray["day"], "year" => $startArray["year"]);
+            $end = array("month" => $endArray["month"], "day" => $endArray["day"], "year" => $endArray["year"]);
+        } else {
+            $start = array("month" => date("n"), "day" => 1, "year" => date("Y"));
+            $end = array("month" => date("n"), "day" => date("t"), "year" => date("Y"));
+        }
+        $form['from_date'] = array(
+            '#type' => 'date',
+            '#title' => t('Début'),
+            '#default_value' => $start,
+            '#description' => "",
+        );
+        $form['to_date'] = array(
+            '#type' => 'date',
+            '#title' => t('Fin'),
+            '#default_value' => $end,
+            '#description' => "",
+        );
+        
+        $form['submit'] = array('#type' => 'submit', '#value' => t('Confirmer'));
+        return $form;
+    }
+    
+    function transaction_stats_form_submit($form, &$form_state) {
+        $_SESSION['noeuds_period_form_start'] = $form_state['values']['from_date'];
+        $_SESSION['noeuds_period_form_end'] = $form_state['values']['to_date'];
+    }
+    
+    function edit_transaction() {
+        $transaction = _get_transaction(arg(3));
+        $output .= drupal_get_form('transaction_edit_form', $transaction);
+        return $output;
+    }
+    
+    function delete_transaction() {
+    	$output .= drupal_get_form('transaction_delete_form');
+    	return $output;
+    }
+    
+    function monthly_fee() {
+        $output .= drupal_get_form('monthly_fee_form');
+        return $output;
+    }
+    
+    /**
+    * Implementation of hook_block
+    * @param string $op one of "list", "view", "save" and "configure"
+    * @param integer $delta code to identify the block
+    * @param array $edit only for "save" operation
+    **/
+    function noeuds_block($op = 'list', $delta = 0, $edit = array()) {  
+        switch ($op) {
+            case "list":
+                // Generate listing of blocks from this module, for the admin/block page
+                $block = array();
+                $block[0]["info"] = t('User\'s Noeuds');
+                //$block[1]["info"] = t('Noeuds transaction');
+                return $block;
+                break;
+            case "view":
+                $block = array(
+                    'subject' => "Transaction",
+                    'content' => drupal_get_form('transaction_users_form', NULL),
+                );
+                return $block;
+                break;
+        }
+    }
+
+
+    function noeuds_user($op, &$edit, &$account, $category = NULL) {
+        switch ($op) {
+            case "view":
+                if (user_access('View user\'s Neuds') || $GLOBALS['user']->uid == $account->uid) {
+                    $profileBalance = _get_users_balance($account->uid);
+                    $offres = _show_user_history($account->uid);
+                
+                    if (!isset($account->content['summary'])) {
+                        $account->content['summary'] = array(
+                            '#type' => 'user_profile_category',
+                            '#attributes' => array('class' => 'user-member'),
+                            '#weight' => 10,
+                            '#title' => t('Historique'),
+                        );
+                    }
+                        
+                    $account->content['summary']['noeuds'] = array(
+                        '#type' => 'user_profile_item',
+                        '#value' => $profileBalance,
+                        '#title' => t('Noeuds'),
+                        '#weight' => 10,
+                    );
+                    $account->content['summary']['noeuds_history'] = array(
+                        '#type' => 'user_profile_item',
+                        '#value' => $offres,
+                        '#title' => t('Historique'),
+                        '#weight' => 20,
+                    );
+                }
+                break;
+            case "insert":
+                $result = db_query('INSERT INTO {noeuds} (uid,balance) VALUES(%d, 3)', $account->uid);
+                break;
+            case "delete":
+                $result = db_query('DELETE FROM {noeuds} WHERE uid = %d', $account->uid);
+                break;
+        }
+    }
+    
+    function monthly_fee_form($form_state)
+    {
+    	$form[$id.'_submit'] = array('#type' => 'submit', '#value' => t('Prélever la cotisation mensuelle'));
+    	return $form;
+    }
+    function monthly_fee_form_submit($form, &$form_state) {
+    	$query = 'SELECT uid FROM {users} WHERE uid != 1 && uid != 0';
+    	$results = db_query($query);
+    	$from = 1;
+    	while ($result = db_fetch_array($results)) {
+    		$to = $result['uid'];
+    		_update_user_balance($to, '0.25', "-");
+    		_update_user_balance($from, '0.25');
+    		$fromBalance = _get_users_balance($from);
+    		$toBalance = _get_users_balance($to);
+    		_new_transaction($from, $to, $fromBalance, $toBalance, '0.25', 'Participation mensuelle');
+    		
+    	}
+    	drupal_set_message(t('Transaction done.'));
+    }
+    
+    /**
+    * Definition of the transaction form
+    **/
+    function transaction_users_form($form_state, $transaction, $id="transaction_users_form") {
+        $form[$id.'_from_name'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Service rendu par'),
+            '#default_value' => isset($transaction->from_name) ? $transaction->from_name : NULL,
+            '#autocomplete_path' => 'user/autocomplete',
+            '#size' => '20',
+            '#maxlength' => '60',
+            '#description' => "",
+        );
+        $form[$id.'_to_name'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Service reçu par'),
+            '#default_value' => isset($transaction->to_name) ? $transaction->to_name : NULL,
+            '#autocomplete_path' => 'user/autocomplete',
+            '#size' => '20',
+            '#maxlength' => '60',
+            '#description' => "",
+        );
+        $form[$id.'_message'] = array(
+            '#type' => 'textarea',
+            '#title' => t('Message'),
+            '#default_value' =>  isset($transaction->message) ? $transaction->message : NULL,
+            '#cols' => 20,
+            '#rows' => 2,
+            '#description' => '',
+        );
+        $form[$id.'_montant'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Montant'),
+            '#default_value' => isset($transaction->amount) ? $transaction->amount : 0,
+            '#size' => '7',
+            '#maxlength' => '60',
+            '#description' => "",
+        );
+        $form[$id.'_submit'] = array('#type' => 'submit', '#value' => t('Confirmer'));
+        return $form;
+    }
+    
+    function transaction_users_form_validate($form, &$form_state, $id="transaction_users_form") {
+        if (!_check_user_exists($form_state['values'][$id.'_from_name'])) {
+            form_set_error($id.'_from_name', t('Please enter a valid username for field "From".'));
+        }
+        if (!_check_user_exists($form_state['values'][$id.'_to_name'])) {
+            form_set_error($id.'_to_name', t('Please enter a valid username for field "To".'));
+        }
+        if ($form_state['values'][$id.'_from_name'] == $form_state['values'][$id.'_to_name']) {
+            form_set_error('', t('From and To fields can\'t be the same.'));
+        }
+        if(!_check_amount($form_state['values'][$id.'_montant'])) {
+            form_set_error($id.'_montant', t('Amount should be a valid decimal.'));
+        }
+    }
+    
+    function transaction_users_form_submit($form, &$form_state, $id="transaction_users_form") {
+        $from = _name_to_uid($form_state['values'][$id.'_from_name']);
+        $to = _name_to_uid($form_state['values'][$id.'_to_name']);
+        
+        _update_user_balance($to, $form_state['values'][$id.'_montant'], "-");
+        _update_user_balance($from, $form_state['values'][$id.'_montant']);
+        
+        $fromBalance = _get_users_balance($from);
+        $toBalance = _get_users_balance($to);
+        _new_transaction($from, $to, $fromBalance, $toBalance, $form_state['values'][$id.'_montant'], $form_state['values'][$id.'_message']);
+        drupal_set_message(t('Transaction done.'));
+    }
+    
+    /**
+    * Definition of the transaction form
+    **/
+    function transaction_delete_form($form_state) {
+        $form[$id.'_submit'] = array('#type' => 'submit', '#value' => t('Confirmer'));
+        $form['#redirect'] = 'admin/user/user';
+        return $form;
+    }
+    
+    function transaction_delete_form_submit($form, &$form_state) {
+    	$transaction = _get_transaction(arg(3));
+    	db_query("DELETE FROM {noeuds_transactions} WHERE tid = %d", arg(3));
+    	drupal_set_message("Transaction supprimée.");
+    }
+    
+    function transaction_edit_form($form_state, $transaction) {
+        return transaction_users_form($form_state, $transaction, 'transaction_edit_form');
+    }
+    
+    function transaction_edit_form_validate($form, &$form_state) {
+        transaction_users_form_validate($form, &$form_state, $id="transaction_edit_form");
+    }
+    
+    function transaction_edit_form_submit($form, &$form_state) {
+        $id = 'transaction_edit_form';
+        $transaction = _get_transaction(arg(3));
+        $from = _name_to_uid($transaction->from_name);
+        $to = _name_to_uid($transaction->to_name);
+        
+        
+        _update_user_balance($to, $transaction->amount);
+        _update_user_balance($from, $transaction->amount, "-");
+        db_query("DELETE FROM {noeuds_transactions} WHERE tid = %d", arg(3));
+        
+        $from = _name_to_uid($form_state['values'][$id.'_from_name']);
+        $to = _name_to_uid($form_state['values'][$id.'_to_name']);
+        
+        
+        _update_user_balance($to, $form_state['values'][$id.'_montant'], "-");
+        _update_user_balance($from, $form_state['values'][$id.'_montant']);
+        
+        $fromBalance = _get_users_balance($from);
+        $toBalance = _get_users_balance($to);
+        _new_transaction($from, $to, $fromBalance, $toBalance, $form_state['values'][$id.'_montant'], $form_state['values'][$id.'_message']);
+        drupal_set_message("Transaction mise à jour.");
+    }
+    
+    function _show_user_history($uid) {
+        $listUsersNames = _list_uid_to_name();
+        $query = 'SELECT 
+                    tid,
+                    IF(duid != '.$uid.',duid,\'-\') as destination, 
+                    IF(suid != '.$uid.',suid,\'-\') as source,
+                    IF(duid != '.$uid.',amount,-amount) as credit, 
+                    message, 
+                    IF(duid != '.$uid.',suid_balance,duid_balance) as balance, 
+                    executed_on 
+                  FROM {noeuds_transactions} 
+                  WHERE suid = '.$uid.' OR duid = '.$uid;
+        
+        // Prepare sortable table by linking headers to Database fields
+        $header = array(
+            array("data" =>t('Date'),"field" => 'executed_on',"sort" => "desc",),
+            array("data" =>t('Offreur'),"field" => 'source',),
+            array("data"=>t('Receveur'),"field" => 'destination',),
+            array("data"=>t('Montant'),"field" => 'credit',),
+            array("data"=>t('Message'),),
+            array("data"=>t('Balance'))
+        );
+        
+        if (user_access('Administer Noeuds')) {
+            $header[] = array("data"=>t('Edit'));
+        }
+        
+        // Tablesort_sql will manage the SORT BY directive
+        $transaction_sort = tablesort_sql($header);
+        // Launche the query by concatenating the SELECt and the SORT BY
+        $result = pager_query($query.$transaction_sort, 10);
+        
+        $rows = array();
+        while ($transaction = db_fetch_object($result)) {
+            $destination = ($listUsersNames[$transaction->destination]) ? $listUsersNames[$transaction->destination] : "-";
+            $source = ($listUsersNames[$transaction->source]) ? $listUsersNames[$transaction->source] : "-";
+            
+            $row = array(
+                date("d/m/Y", $transaction->executed_on),
+                $source,
+                $destination,
+                $transaction->credit,
+                $transaction->message,
+                $transaction->balance
+            );
+            if (user_access('Administer Noeuds')) {
+            	$edit_icon = theme_image("sites/all/modules/noeuds/page_edit.gif", '', '', NULL, FALSE);
+            	$delete_icon = theme_image("sites/all/modules/noeuds/page_cross.gif");
+                $row[] = l($edit_icon, 'noeuds/transaction/edit/'.$transaction->tid, array('html' => TRUE)) . ' ' . l($delete_icon, 'noeuds/transaction/delete/'.$transaction->tid, array('html' => TRUE));
+            }
+            $rows[] = $row;
+        }
+        $offres = theme('table', $header, $rows, array('class' => 'transactions'), NULL, 'transactions');
+        // Define a pager to avoid display of very long tables
+        $offres .= theme('pager', NULL, 10);
+        return $offres;
+    }
+    
+    function _list_uid_to_name() {
+        $list = array();
+        $sql = "SELECT uid, name FROM {users}";
+        $result = db_query($sql);
+        while($curUser = db_fetch_object($result)) {
+            $list[$curUser->uid] = $curUser->name;
+        }
+        return $list;
+    }
+    
+    function _name_to_uid($name) {
+        $query = db_query("SELECT uid FROM {users} WHERE name = '%s'", $name);
+        $result = db_fetch_object($query);
+        return $result->uid;
+    }
+    
+    function _check_user_exists($user) {
+        $count = db_result(db_query("SELECT COUNT(*) FROM {users} WHERE name = '%s'", $user));
+        if (intval($count) != 1) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+    
+    function _get_users_balance($uid) {
+        $query = db_query('SELECT balance FROM {noeuds} WHERE uid = %d', $uid);
+        $result = db_fetch_object($query);
+        if (!$result) {
+            $query = db_query('INSERT INTO {noeuds} (uid,balance) VALUES(%d, 0)', $uid);
+            $result->balance = 0;
+        }
+        return $result->balance;
+    }
+    
+    function _update_user_balance($uid, $amount, $operation = "+") {
+        $query = db_query('SELECT balance FROM {noeuds} WHERE uid = %d', $uid);
+        $result = db_fetch_object($query);
+        if (!$result) {
+            $query = db_query('INSERT INTO {noeuds} (uid,balance) VALUES(%d, 3)', $uid);
+        }
+        $result = db_query("UPDATE {noeuds} SET balance = balance %s %s WHERE uid = %d", $operation, $amount, $uid);
+        return $result;
+    }
+
+    function _get_transaction($tid) {
+        $list_users_names = _list_uid_to_name();
+        $result = db_query('SELECT * FROM {noeuds_transactions} WHERE tid = %d', $tid);
+        
+        $transaction = db_fetch_object($result);
+        $transaction->from_name = $list_users_names[$transaction->suid];
+        $transaction->to_name = $list_users_names[$transaction->duid];
+        return $transaction;
+    }
+    
+    function _new_transaction($from, $to, $fromBalance, $toBalance, $amount, $message) {
+        $query = "INSERT INTO {noeuds_transactions} 
+                    (suid,duid,suid_balance,duid_balance,amount,message,valid,executed_on) 
+                    VALUES(%d,%d,%s,%s,%s,'%s',1,%s)";
+        $result = db_query($query, $from, $to, $fromBalance, $toBalance, $amount, $message, time());
+        return $result;
+    }
+    
+    function _check_amount(&$amount) {
+        $amount = str_replace(",", ".", $amount);
+        if(!is_numeric($amount)) {
+            return false;
+        } else {
+            return true;
+        }
+    }
